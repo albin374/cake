@@ -37,10 +37,12 @@ export const FROSTING_PRICES = {
 
 export const ICING_STYLE_PRICES = {
   smooth: { name: 'Sleek Smooth', surcharge: 0 },
+  pearl_border: { name: 'White Pearl Border', surcharge: 15 },
+  flower_border: { name: 'Buttercream Flower Border', surcharge: 25 },
+  rosette: { name: 'Piped Rosette Crown', surcharge: 20 },
+  drip: { name: 'Gourmet Chocolate Drip', surcharge: 20 },
   swirl: { name: 'Whimsical Swirls', surcharge: 10 },
   ruffle: { name: 'Vintage Ruffle Petals', surcharge: 15 },
-  drip: { name: 'Gourmet Artisanal Drip', surcharge: 20 },
-  rosette: { name: 'Piped Rosette Crown', surcharge: 25 },
 };
 
 export const MESSAGE_CUSTOMIZATION_FEE = 15; // Free if under 15 chars, or standard plate fee

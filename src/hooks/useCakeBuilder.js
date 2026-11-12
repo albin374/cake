@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { DEFAULT_CAKE_STATE } from '../data/customizationOptions';
 import { getStoredBuilderState, setStoredBuilderState } from '../utils/storage';
 import { useUndoRedo } from './useUndoRedo';
+import { clampToCakeSurface } from '../components/CakeCanvas';
 
 export const useCakeBuilder = () => {
   // Try loading from localStorage on first mount, else default
@@ -35,7 +36,38 @@ export const useCakeBuilder = () => {
   }, [setCake]);
 
   // Shapes & flavours
-  const setShape = useCallback((shape) => updateCakeProperty('shape', shape), [updateCakeProperty]);
+  const setShape = useCallback(
+    (newShape) => {
+      setCake((prev) => {
+        const clampedDecorations = (prev.decorations || []).map((dec) => {
+          const clamped = clampToCakeSurface(dec.x, dec.y, newShape);
+          return { ...dec, x: clamped.x, y: clamped.y };
+        });
+
+        const clampedMsgCoords = clampToCakeSurface(
+          prev.message?.x || 250,
+          prev.message?.y || 165,
+          newShape
+        );
+
+        const clampedMessage = prev.message
+          ? {
+              ...prev.message,
+              x: clampedMsgCoords.x,
+              y: clampedMsgCoords.y
+            }
+          : prev.message;
+
+        return {
+          ...prev,
+          shape: newShape,
+          decorations: clampedDecorations,
+          message: clampedMessage
+        };
+      });
+    },
+    [setCake]
+  );
   const setSize = useCallback((size) => updateCakeProperty('size', size), [updateCakeProperty]);
   const setFlavour = useCallback((flavour) => updateCakeProperty('flavour', flavour), [updateCakeProperty]);
   const setFrosting = useCallback((frosting) => updateCakeProperty('frosting', frosting), [updateCakeProperty]);
@@ -58,8 +90,8 @@ export const useCakeBuilder = () => {
     const newInstanceId = `dec-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     
     // Default center placement on top surface if position not provided
-    const targetX = position?.x ?? Math.round(250 + (Math.random() * 40 - 20));
-    const targetY = position?.y ?? Math.round(190 + (Math.random() * 30 - 15));
+    const targetX = position?.x ?? Math.round(250 + (Math.random() * 30 - 15));
+    const targetY = position?.y ?? Math.round(165 + (Math.random() * 24 - 12));
 
     const newDeco = {
       instanceId: newInstanceId,
