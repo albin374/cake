@@ -1,0 +1,62 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    background-color: #FFF9F3;
+    color: #63384B;
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  }
+
+  h1, h2, h3, .font-display {
+    font-family: 'Playfair Display', Georgia, serif;
+  }
+}
+
+/* Custom Cute Gingham Pattern */
+.bg-gingham {
+  background-color: #FFF0F5;
+  background-image: 
+    linear-gradient(45deg, rgba(232, 91, 145, 0.08) 25%, transparent 25%), 
+    linear-gradient(-45deg, rgba(232, 91, 145, 0.08) 25%, transparent 25%), 
+    linear-gradient(45deg, transparent 75%, rgba(232, 91, 145, 0.08) 75%), 
+    linear-gradient(-45deg, transparent 75%, rgba(232, 91, 145, 0.08) 75%);
+  background-size: 28px 28px;
+  background-position: 0 0, 0 14px, 14px -14px, -14px 0px;
+}
+
+.bg-gingham-soft {
+  background-color: #FFF9F3;
+  background-image: 
+    linear-gradient(rgba(232, 91, 145, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(232, 91, 145, 0.06) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+/* Cute bakery scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #FFF0F5;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb {
+  background: #E85B91;
+  border-radius: 9999px;
+  border: 2px solid #FFF0F5;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #C83E73;
+}
+
+/* Glow effects */
+.cake-glow {
+  box-shadow: 0 10px 30px -5px rgba(232, 91, 145, 0.35);
+}
+
+.cake-card-shadow {
+  box-shadow: 0 10px 25px -5px rgba(232, 91, 145, 0.08), 0 8px 10px -6px rgba(99, 56, 75, 0.04);
+}
