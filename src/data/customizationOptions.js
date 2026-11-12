@@ -1,10 +1,10 @@
 import { BASE_CAKE_PRICES, SIZE_PRICES, FLAVOUR_PRICES, FROSTING_PRICES, ICING_STYLE_PRICES, FROSTING_COLORS, FONT_OPTIONS } from './cakePrices';
 
 export const SHAPES = [
-  { id: 'round', name: 'Round Tier', icon: 'Circle', desc: 'Timeless, balanced & beloved' },
-  { id: 'square', name: 'Square Modern', icon: 'Square', desc: 'Chic geometric elegance' },
-  { id: 'heart', name: 'Romantic Heart', icon: 'Heart', desc: 'Sweetheart anniversary special' },
-  { id: 'rectangle', name: 'Sheet Rectangle', icon: 'RectangleHorizontal', desc: 'Grand party & celebration cut' },
+  { id: 'round', name: 'Round Tier', icon: 'Circle', desc: 'Timeless studio cylinder on marble board' },
+  { id: 'square', name: 'Square Modern', icon: 'Square', desc: 'Chic geometric cube with crisp edges' },
+  { id: 'heart', name: 'Romantic Heart', icon: 'Heart', desc: 'Sweetheart sculpted curves' },
+  { id: 'rectangle', name: 'Sheet Rectangle', icon: 'RectangleHorizontal', desc: 'Grand celebratory slab cut' },
 ];
 
 export const FLAVOURS = Object.entries(FLAVOUR_PRICES).map(([id, item]) => ({
@@ -48,18 +48,19 @@ export const DEFAULT_CAKE_STATE = {
     color: '#63384B',
     size: 26,
     x: 250,
-    y: 245,
+    y: 200,
+    rotation: 0
   },
   decorations: [
     {
       instanceId: 'dec-1',
       id: 'strawberry',
-      name: 'Fresh Strawberry',
+      name: 'Fresh Garden Strawberry',
       price: 12,
-      x: 215,
-      y: 195,
-      width: 48,
-      height: 58,
+      x: 220,
+      y: 185,
+      width: 52,
+      height: 62,
       rotation: -10,
       scaleX: 1,
       scaleY: 1,
@@ -68,12 +69,12 @@ export const DEFAULT_CAKE_STATE = {
     {
       instanceId: 'dec-2',
       id: 'strawberry',
-      name: 'Fresh Strawberry',
+      name: 'Fresh Garden Strawberry',
       price: 12,
       x: 280,
-      y: 195,
-      width: 48,
-      height: 58,
+      y: 185,
+      width: 52,
+      height: 62,
       rotation: 12,
       scaleX: 1,
       scaleY: 1,
@@ -81,17 +82,17 @@ export const DEFAULT_CAKE_STATE = {
     },
     {
       instanceId: 'dec-3',
-      id: 'piping_rosette',
-      name: 'Piped Cream Rosette',
-      price: 8,
-      x: 248,
-      y: 170,
+      id: 'blueberry',
+      name: 'Wild Blueberries Cluster',
+      price: 9,
+      x: 250,
+      y: 165,
       width: 44,
-      height: 44,
+      height: 48,
       rotation: 0,
       scaleX: 1,
       scaleY: 1,
-      category: 'cream'
+      category: 'fruits'
     }
   ]
 };

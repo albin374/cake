@@ -100,12 +100,15 @@ export const Gallery = () => {
                   <span className="text-cake-muted text-[10px]">({cake.reviewsCount})</span>
                 </div>
 
-                {/* Artistic 2D Cake Graphic Representation */}
-                <div className="relative flex flex-col items-center group-hover:scale-108 transition-transform duration-300">
-                  <div className="text-6xl drop-shadow-md select-none">
-                    {cake.config.flavour === 'chocolate' ? '🍫' : cake.config.shape === 'heart' ? '💖' : '🎂'}
-                  </div>
-                  <div className="mt-2 text-xs font-serif font-bold text-cake-dark tracking-wide bg-white/70 px-3 py-0.5 rounded-full border border-pink-100">
+                {/* Photorealistic Cake Studio Photo */}
+                <div className="relative w-full h-full flex items-center justify-center group-hover:scale-105 transition-transform duration-300">
+                  <img
+                    src={cake.previewPhoto || `/assets/cakes/cake_${cake.config.shape}_${cake.config.flavour}.png`}
+                    alt={cake.title}
+                    className="max-h-48 max-w-full object-contain filter drop-shadow-md"
+                    loading="lazy"
+                  />
+                  <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-xs font-serif font-bold text-cake-dark tracking-wide bg-white/90 backdrop-blur-xs px-3.5 py-1 rounded-full border border-pink-200 shadow-xs whitespace-nowrap">
                     "{cake.config.message.text}"
                   </div>
                 </div>

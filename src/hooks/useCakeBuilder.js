@@ -57,9 +57,9 @@ export const useCakeBuilder = () => {
   const addDecoration = useCallback((item, position = null) => {
     const newInstanceId = `dec-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     
-    // Default center placement if position not provided
-    const targetX = position?.x ?? (250 + (Math.random() * 40 - 20));
-    const targetY = position?.y ?? (200 + (Math.random() * 40 - 20));
+    // Default center placement on top surface if position not provided
+    const targetX = position?.x ?? Math.round(250 + (Math.random() * 40 - 20));
+    const targetY = position?.y ?? Math.round(190 + (Math.random() * 30 - 15));
 
     const newDeco = {
       instanceId: newInstanceId,

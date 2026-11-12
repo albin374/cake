@@ -13,39 +13,209 @@ import {
   Line
 } from 'react-konva';
 import { INGREDIENTS } from '../data/ingredients';
-import { FROSTING_COLORS, FLAVOUR_PRICES } from '../data/cakePrices';
+import { FROSTING_COLORS } from '../data/cakePrices';
 
-// Image loader cache for decorations
-const useDecorationImage = (dataUri) => {
-  const [image, setImage] = useState(null);
+// Generic image loader hook with caching
+const imageCache = new Map();
+
+const useLoadedImage = (url) => {
+  const [image, setImage] = useState(() => (url ? imageCache.get(url) || null : null));
 
   useEffect(() => {
-    if (!dataUri) return;
+    if (!url) {
+      setImage(null);
+      return;
+    }
+
+    if (imageCache.has(url)) {
+      setImage(imageCache.get(url));
+      return;
+    }
+
     const img = new window.Image();
-    img.src = dataUri;
+    img.src = url;
     img.crossOrigin = 'anonymous';
     img.onload = () => {
+      imageCache.set(url, img);
       setImage(img);
     };
-  }, [dataUri]);
+    img.onerror = () => {
+      console.warn('Failed to load image:', url);
+    };
+  }, [url]);
 
   return image;
 };
 
-// Individual Decoration on Canvas
-const DecorationElement = ({
+// Texture-preserving Tinted Cake Canvas Hook
+const useTintedPhotorealisticCake = (shape, flavour, frostingColorHex, cakeImageUrl) => {
+  const baseImg = useLoadedImage(cakeImageUrl);
+  const [tintedCanvas, setTintedCanvas] = useState(null);
+
+  useEffect(() => {
+    if (!baseImg) {
+      setTintedCanvas(null);
+      return;
+    }
+
+    // If white or pure vanilla/chocolate flavour with matching color, use pristine photo directly
+    if (!frostingColorHex || frostingColorHex.toLowerCase() === '#fffdf9' || frostingColorHex.toLowerCase() === '#ffffff') {
+      setTintedCanvas(baseImg);
+      return;
+    }
+
+    try {
+      const offscreen = document.createElement('canvas');
+      offscreen.width = baseImg.width;
+      offscreen.height = baseImg.height;
+      const ctx = offscreen.getContext('2d');
+      if (!ctx) {
+        setTintedCanvas(baseImg);
+        return;
+      }
+
+      // 1. Draw base photo
+      ctx.drawImage(baseImg, 0, 0);
+
+      // 2. Extract image data to tint ONLY the cake frosting/sponge while protecting the marble board & gold rim
+      const imgData = ctx.getImageData(0, 0, offscreen.width, offscreen.height);
+      const data = imgData.data;
+
+      // Parse hex color
+      const hex = frostingColorHex.replace('#', '');
+      const tr = parseInt(hex.substring(0, 2), 16);
+      const tg = parseInt(hex.substring(2, 4), 16);
+      const tb = parseInt(hex.substring(4, 6), 16);
+
+      const rMult = tr / 255;
+      const gMult = tg / 255;
+      const bMult = tb / 255;
+
+      const h = offscreen.height;
+      const w = offscreen.width;
+
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const idx = (y * w + x) * 4;
+          const a = data[idx + 3];
+          if (a === 0) continue;
+
+          const r = data[idx];
+          const g = data[idx + 1];
+          const b = data[idx + 2];
+
+          // Protect bottom marble board (lower 20% with near-neutral gray/white) and gold rim
+          const isMarbleBoard = y > h * 0.76 && Math.abs(r - g) < 14 && Math.abs(r - b) < 14 && r > 210;
+          const isGoldRim = y > h * 0.72 && r > 175 && g > 135 && b < 110;
+
+          if (!isMarbleBoard && !isGoldRim) {
+            // High-pass specular preservation
+            const brightness = (r + g + b) / 3;
+            const specular = Math.max(0, brightness - 225) / 30; // 0 to 1
+
+            // Multiply blend with gamma boost
+            data[idx] = Math.min(255, Math.round(r * rMult * 1.08 + specular * 50));
+            data[idx + 1] = Math.min(255, Math.round(g * gMult * 1.08 + specular * 50));
+            data[idx + 2] = Math.min(255, Math.round(b * bMult * 1.08 + specular * 50));
+          }
+        }
+      }
+
+      ctx.putImageData(imgData, 0, 0);
+      setTintedCanvas(offscreen);
+    } catch (e) {
+      console.warn('Offscreen tinting fallback to base photo:', e);
+      setTintedCanvas(baseImg);
+    }
+  }, [baseImg, shape, flavour, frostingColorHex, cakeImageUrl]);
+
+  return tintedCanvas;
+};
+
+// Surface Boundary Validation & Clamping
+const clampToCakeSurface = (x, y, shape) => {
+  // Center of top surface in virtual 500x500 coordinates
+  const cx = 250;
+  const cy = 195;
+
+  if (shape === 'round') {
+    const rx = 135;
+    const ry = 62;
+    const dx = x - cx;
+    const dy = y - cy;
+    const distSq = (dx * dx) / (rx * rx) + (dy * dy) / (ry * ry);
+
+    if (distSq <= 1.0) {
+      return { x, y };
+    }
+    const angle = Math.atan2(dy / ry, dx / rx);
+    return {
+      x: Math.round(cx + Math.cos(angle) * (rx * 0.94)),
+      y: Math.round(cy + Math.sin(angle) * (ry * 0.94))
+    };
+  }
+
+  if (shape === 'heart') {
+    const rx = 125;
+    const ry = 65;
+    const dx = x - cx;
+    const dy = y - cy;
+    const distSq = (dx * dx) / (rx * rx) + (dy * dy) / (ry * ry);
+
+    if (distSq <= 0.95 && y >= cy - 65 && y <= cy + 65) {
+      return { x, y };
+    }
+    const angle = Math.atan2(dy, dx);
+    return {
+      x: Math.round(cx + Math.cos(angle) * (rx * 0.85)),
+      y: Math.round(cy + Math.sin(angle) * (ry * 0.85))
+    };
+  }
+
+  if (shape === 'square') {
+    const halfDiagX = 120;
+    const halfDiagY = 58;
+    const dx = Math.abs(x - cx);
+    const dy = Math.abs(y - cy);
+    const manhattan = dx / halfDiagX + dy / halfDiagY;
+
+    if (manhattan <= 0.95) {
+      return { x, y };
+    }
+    const factor = 0.92 / manhattan;
+    return {
+      x: Math.round(cx + (x - cx) * factor),
+      y: Math.round(cy + (y - cy) * factor)
+    };
+  }
+
+  // Rectangle Slab
+  if (shape === 'rectangle') {
+    const halfW = 140;
+    const halfH = 55;
+    const clampedX = Math.max(cx - halfW, Math.min(cx + halfW, x));
+    const clampedY = Math.max(cy - halfH, Math.min(cy + halfH, y));
+    return { x: clampedX, y: clampedY };
+  }
+
+  return { x, y };
+};
+
+// Individual Realistic Decoration Element
+const RealisticDecorationElement = ({
   decoration,
   isSelected,
   onSelect,
   onChange,
-  onContextMenu
+  cakeShape
 }) => {
   const shapeRef = useRef(null);
   const ingredientData = useMemo(
     () => INGREDIENTS.find((i) => i.id === decoration.id),
     [decoration.id]
   );
-  const image = useDecorationImage(ingredientData?.image);
+
+  const image = useLoadedImage(ingredientData?.image);
 
   return (
     <Group
@@ -66,9 +236,15 @@ const DecorationElement = ({
         onSelect(decoration.instanceId);
       }}
       onDragEnd={(e) => {
+        const rawX = Math.round(e.target.x());
+        const rawY = Math.round(e.target.y());
+        // Clamp decoration strictly within the cake's edible top surface
+        const clamped = clampToCakeSurface(rawX, rawY, cakeShape);
+        e.target.x(clamped.x);
+        e.target.y(clamped.y);
         onChange(decoration.instanceId, {
-          x: Math.round(e.target.x()),
-          y: Math.round(e.target.y())
+          x: clamped.x,
+          y: clamped.y
         });
       }}
       onTransformEnd={() => {
@@ -76,35 +252,48 @@ const DecorationElement = ({
         if (!node) return;
         const scaleX = node.scaleX();
         const scaleY = node.scaleY();
+        const rawX = Math.round(node.x());
+        const rawY = Math.round(node.y());
+        const clamped = clampToCakeSurface(rawX, rawY, cakeShape);
+        node.x(clamped.x);
+        node.y(clamped.y);
         onChange(decoration.instanceId, {
-          x: Math.round(node.x()),
-          y: Math.round(node.y()),
+          x: clamped.x,
+          y: clamped.y,
           rotation: Math.round(node.rotation()),
           scaleX,
           scaleY
         });
       }}
     >
+      {/* Soft Contact Shadow beneath topping */}
+      <Ellipse
+        x={0}
+        y={(decoration.height || 48) * 0.42}
+        radiusX={(decoration.width || 48) * 0.38}
+        radiusY={(decoration.height || 48) * 0.16}
+        fill="#3D1D2B"
+        opacity={0.32}
+        blurRadius={6}
+      />
+
       {image ? (
         <KonvaImage
           image={image}
-          width={decoration.width}
-          height={decoration.height}
-          offsetX={decoration.width / 2}
-          offsetY={decoration.height / 2}
-          shadowColor="#000"
-          shadowBlur={isSelected ? 10 : 5}
-          shadowOpacity={0.25}
-          shadowOffsetY={4}
+          width={decoration.width || 48}
+          height={decoration.height || 48}
+          offsetX={(decoration.width || 48) / 2}
+          offsetY={(decoration.height || 48) / 2}
+          shadowColor="#2A141E"
+          shadowBlur={isSelected ? 14 : 7}
+          shadowOpacity={0.28}
+          shadowOffsetY={isSelected ? 5 : 3}
         />
       ) : (
-        // Fallback placeholder while loading
         <Circle
-          radius={20}
+          radius={22}
           fill="#E85B91"
-          opacity={0.7}
-          offsetX={0}
-          offsetY={0}
+          opacity={0.8}
         />
       )}
     </Group>
@@ -123,25 +312,25 @@ export const CakeCanvas = ({
 }) => {
   const containerRef = useRef(null);
   const trRef = useRef(null);
-  const [dimensions, setDimensions] = useState({ width: 560, height: 520 });
+  const [dimensions, setDimensions] = useState({ width: 580, height: 540 });
 
   // Size scale factor for 0.5kg to 3kg
   const sizeScales = {
-    '0.5': 0.85,
+    '0.5': 0.88,
     '1': 1.0,
     '1.5': 1.08,
-    '2': 1.16,
-    '3': 1.25
+    '2': 1.15,
+    '3': 1.24
   };
   const currentScale = (sizeScales[cake.size] || 1.0) * zoomLevel;
 
-  // Measure container for responsive canvas
+  // Responsive container sizing
   useEffect(() => {
     const handleResize = () => {
       if (containerRef.current) {
         const rect = containerRef.current.getBoundingClientRect();
-        const width = Math.min(620, Math.max(340, rect.width - 20));
-        const height = Math.min(560, Math.max(360, width * 0.95));
+        const width = Math.min(640, Math.max(340, rect.width - 16));
+        const height = Math.min(580, Math.max(360, width * 0.95));
         setDimensions({ width, height });
       }
     };
@@ -150,7 +339,7 @@ export const CakeCanvas = ({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Sync Transformer to selected decoration
+  // Sync Konva Transformer to selected node
   useEffect(() => {
     if (!trRef.current || !stageRef.current) return;
     if (selectedId) {
@@ -165,11 +354,10 @@ export const CakeCanvas = ({
     trRef.current.getLayer()?.batchDraw();
   }, [selectedId, cake.decorations, stageRef]);
 
-  // Handle keyboard shortcuts (Delete, Escape)
+  // Keyboard shortcuts (Delete, Escape)
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        // Only if not focused on an input
         if (
           document.activeElement?.tagName === 'INPUT' ||
           document.activeElement?.tagName === 'TEXTAREA'
@@ -188,7 +376,7 @@ export const CakeCanvas = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedId, deleteDecoration, setSelectedId]);
 
-  // Native HTML5 drop support onto Konva canvas
+  // Handle Drag & Drop onto Konva Stage
   const handleDragOver = (e) => {
     e.preventDefault();
   };
@@ -206,41 +394,70 @@ export const CakeCanvas = ({
       const stage = stageRef.current;
       const pointerPos = stage.getPointerPosition();
 
-      // Convert coordinate relative to canvas center offset and zoom
       const centerX = dimensions.width / 2;
       const centerY = dimensions.height / 2;
 
-      // Stage content is centered around (250, 240)
+      // Virtual cake center is at (250, 240)
       const adjustedX = 250 + (pointerPos.x - centerX) / currentScale;
       const adjustedY = 240 + (pointerPos.y - centerY) / currentScale;
 
-      onDropItem(item, { x: Math.round(adjustedX), y: Math.round(adjustedY) });
+      // Surface Boundary Check: clamp strictly to the top surface
+      const clamped = clampToCakeSurface(Math.round(adjustedX), Math.round(adjustedY), cake.shape);
+
+      onDropItem(item, clamped);
     } catch (err) {
       console.error('Error handling dropped item:', err);
     }
   };
 
-  // Deselect when clicking empty canvas
   const checkDeselect = (e) => {
-    if (e.target === e.target.getStage() || e.target.name() === 'background-plate') {
+    if (e.target === e.target.getStage() || e.target.name() === 'background-plate' || e.target.name() === 'cake-base') {
       setSelectedId(null);
     }
   };
 
-  // Get colors
+  // Find active frosting color hex
   const activeFrostingColor = useMemo(() => {
     const found = FROSTING_COLORS.find((c) => c.id === cake.frostingColor);
     return found || FROSTING_COLORS[1];
   }, [cake.frostingColor]);
 
-  const activeFlavour = useMemo(() => {
-    const found = FLAVOUR_PRICES[cake.flavour];
-    return found || FLAVOUR_PRICES.vanilla;
-  }, [cake.flavour]);
+  // Photorealistic Cake Image Path
+  const cakePhotoUrl = useMemo(() => {
+    const flavour = cake.flavour || 'vanilla';
+    const shape = cake.shape || 'round';
+    return `/assets/cakes/cake_${shape}_${flavour}.png`;
+  }, [cake.shape, cake.flavour]);
 
-  // Center coordinate of the cake inside internal 500x500 virtual coordinates
+  // Photorealistic Drip Overlay Image
+  const dripImage = useLoadedImage(cake.icingStyle === 'drip' ? '/assets/cakes/cake_chocolate_drip.png' : null);
+
+  // Tinted Cake Image (Preserving Texture & Highlights)
+  const tintedCakeCanvas = useTintedPhotorealisticCake(
+    cake.shape,
+    cake.flavour,
+    activeFrostingColor.hex,
+    cakePhotoUrl
+  );
+
+  // Center coordinate inside 500x500 virtual scene
   const cx = 250;
-  const cy = 250;
+  const cy = 240;
+
+  // Cake dimensions in virtual space
+  const cakeDimensions = useMemo(() => {
+    if (cake.shape === 'rectangle') {
+      return { width: 500, height: 290, offsetX: 250, offsetY: 155 };
+    }
+    if (cake.shape === 'heart') {
+      return { width: 460, height: 356, offsetX: 230, offsetY: 195 };
+    }
+    if (cake.shape === 'square') {
+      return { width: 460, height: 368, offsetX: 230, offsetY: 200 };
+    }
+    // Round
+    return { width: 460, height: 365, offsetX: 230, offsetY: 200 };
+  }, [cake.shape]);
 
   return (
     <div
@@ -249,7 +466,7 @@ export const CakeCanvas = ({
       onDrop={handleDrop}
       className="relative w-full flex items-center justify-center p-2 select-none"
     >
-      <div className="relative rounded-3xl overflow-hidden shadow-2xl border-4 border-white/80 bg-gradient-to-b from-[#FFF5F8] to-[#FFF9F3]">
+      <div className="relative rounded-3xl overflow-hidden shadow-2xl border-4 border-white/90 bg-gradient-to-b from-[#FFF5F8] via-[#FFF9F3] to-[#FFF0F5]">
         <Stage
           ref={stageRef}
           width={dimensions.width}
@@ -258,355 +475,187 @@ export const CakeCanvas = ({
           onTouchStart={checkDeselect}
           className="cursor-crosshair"
         >
-          {/* Main Cake Layer */}
+          {/* Main Photorealistic Scene Layer */}
           <Layer>
-            {/* Center Cake Scene Group with responsive scaling & centering */}
             <Group
               x={dimensions.width / 2}
               y={dimensions.height / 2}
-              offsetX={250}
-              offsetY={240}
+              offsetX={cx}
+              offsetY={cy}
               scaleX={currentScale}
               scaleY={currentScale}
             >
-              {/* --- BOTTOM CAKE BOARD / PEDESTAL STAND --- */}
+              {/* LAYER 1: Realistic Pedestal Shadow on Table */}
               <Ellipse
                 name="background-plate"
                 x={cx}
-                y={cy + 85}
-                radiusX={180}
-                radiusY={70}
-                fill="#F7F1EB"
-                stroke="#E8DFD7"
-                strokeWidth={3}
-                shadowColor="#4A2835"
-                shadowBlur={25}
-                shadowOpacity={0.16}
-                shadowOffsetY={15}
-              />
-              {/* Scalloped Gold/Lace Cake Rim */}
-              <Ellipse
-                name="background-plate"
-                x={cx}
-                y={cy + 83}
-                radiusX={172}
-                radiusY={66}
-                fill="transparent"
-                stroke="#E5C79E"
-                strokeWidth={2}
-                dash={[6, 6]}
+                y={cy + 105}
+                radiusX={215}
+                radiusY={75}
+                fill="#2E1822"
+                opacity={0.16}
+                blurRadius={22}
               />
 
-              {/* --- CAKE BASE & 3D BODY RENDERED BY SHAPE --- */}
-              {cake.shape === 'round' && (
+              {/* LAYER 2, 3 & 4: PHOTOREALISTIC CAKE BASE (Board + Body + Frosting Texture) */}
+              {tintedCakeCanvas ? (
+                <KonvaImage
+                  name="cake-base"
+                  image={tintedCakeCanvas}
+                  x={cx}
+                  y={cy}
+                  width={cakeDimensions.width}
+                  height={cakeDimensions.height}
+                  offsetX={cakeDimensions.offsetX}
+                  offsetY={cakeDimensions.offsetY}
+                  shadowColor="#421E2C"
+                  shadowBlur={18}
+                  shadowOpacity={0.22}
+                  shadowOffsetY={10}
+                />
+              ) : (
+                /* Sleek loading placeholder while high-res photo renders */
                 <Group>
-                  {/* Side Body (Cylinder Depth) */}
-                  <Rect
-                    x={cx - 140}
-                    y={cy - 20}
-                    width={280}
-                    height={85}
-                    fillLinearGradientStartPoint={{ x: 0, y: 0 }}
-                    fillLinearGradientEndPoint={{ x: 280, y: 0 }}
-                    fillLinearGradientColorStops={[
-                      0,
-                      activeFrostingColor.darkHex,
-                      0.3,
-                      activeFrostingColor.hex,
-                      0.8,
-                      activeFrostingColor.hex,
-                      1,
-                      activeFrostingColor.darkHex
-                    ]}
-                  />
-                  {/* Flavour Crumb Texture Peeking on Side Base */}
-                  <Rect
-                    x={cx - 140}
-                    y={cy + 55}
-                    width={280}
-                    height={10}
-                    fill={activeFlavour.sideColor}
-                    opacity={0.35}
-                  />
-
-                  {/* Bottom Rounded Curve */}
                   <Ellipse
                     x={cx}
-                    y={cy + 65}
-                    radiusX={140}
-                    radiusY={50}
-                    fill={activeFrostingColor.darkHex}
+                    y={cy + 75}
+                    radiusX={175}
+                    radiusY={65}
+                    fill="#F7F1EB"
+                    stroke="#E8DFD7"
+                    strokeWidth={2}
                   />
+                  <Ellipse
+                    x={cx}
+                    y={cy - 25}
+                    radiusX={135}
+                    radiusY={55}
+                    fill={activeFrostingColor.hex}
+                    stroke={activeFrostingColor.darkHex}
+                  />
+                </Group>
+              )}
 
-                  {/* Decorative Bottom Border Pearls / Shells */}
-                  {Array.from({ length: 22 }).map((_, i) => {
-                    const angle = (Math.PI / 21) * i;
-                    const bx = cx - Math.cos(angle) * 140;
-                    const by = cy + 65 + Math.sin(angle) * 50;
-                    return (
+              {/* LAYER 5: ICING DECORATIONS & BORDERS ACCORDING TO icingStyle */}
+              {/* Rosettes Crown */}
+              {cake.icingStyle === 'rosette' &&
+                Array.from({ length: 18 }).map((_, i) => {
+                  const angle = (2 * Math.PI / 18) * i;
+                  const rx = cx + Math.cos(angle) * (cake.shape === 'rectangle' ? 140 : 130);
+                  const ry = (cy - 45) + Math.sin(angle) * (cake.shape === 'rectangle' ? 52 : 55);
+                  return (
+                    <Group key={`rosette-${i}`} x={rx} y={ry}>
                       <Circle
-                        key={`bot-pearl-${i}`}
-                        x={bx}
-                        y={by}
-                        radius={6.5}
-                        fill="#FFFFFF"
+                        radius={9.5}
+                        fill="#FFFDF9"
                         stroke={activeFrostingColor.darkHex}
-                        strokeWidth={1}
-                        shadowColor="#000"
-                        shadowBlur={3}
-                        shadowOpacity={0.15}
+                        strokeWidth={1.5}
+                        shadowColor="#381D26"
+                        shadowBlur={5}
+                        shadowOpacity={0.28}
+                        shadowOffsetY={2}
                       />
-                    );
-                  })}
-
-                  {/* Drips (if Icing Style is 'drip') */}
-                  {cake.icingStyle === 'drip' && (
-                    <Group>
-                      {[
-                        { x: -130, h: 25 },
-                        { x: -95, h: 42 },
-                        { x: -60, h: 28 },
-                        { x: -20, h: 50 },
-                        { x: 15, h: 32 },
-                        { x: 50, h: 48 },
-                        { x: 85, h: 35 },
-                        { x: 120, h: 22 }
-                      ].map((drip, idx) => (
-                        <Path
-                          key={`drip-${idx}`}
-                          data={`M ${cx + drip.x - 8} ${cy - 5} Q ${cx + drip.x} ${cy + drip.h} ${cx + drip.x + 8} ${cy - 5} Z`}
-                          fill={cake.flavour === 'chocolate' ? '#3B1E14' : activeFrostingColor.darkHex}
-                          opacity={0.9}
-                        />
-                      ))}
+                      <Circle radius={4} fill={activeFrostingColor.hex} opacity={0.8} />
                     </Group>
-                  )}
+                  );
+                })}
 
-                  {/* Top Frosting Surface (Ellipse) */}
-                  <Ellipse
-                    x={cx}
-                    y={cy - 20}
-                    radiusX={140}
-                    radiusY={52}
-                    fillLinearGradientStartPoint={{ x: cx - 140, y: cy - 70 }}
-                    fillLinearGradientEndPoint={{ x: cx + 140, y: cy + 30 }}
-                    fillLinearGradientColorStops={[
-                      0,
-                      '#FFFFFF',
-                      0.3,
-                      activeFrostingColor.hex,
-                      1,
-                      activeFrostingColor.hex
-                    ]}
-                    stroke={activeFrostingColor.darkHex}
-                    strokeWidth={1.5}
-                    shadowColor="#63384B"
-                    shadowBlur={8}
-                    shadowOpacity={0.12}
-                    shadowOffsetY={2}
-                  />
-
-                  {/* Top Border Piping according to icingStyle */}
-                  {cake.icingStyle === 'rosette' &&
-                    Array.from({ length: 18 }).map((_, i) => {
-                      const angle = (2 * Math.PI / 18) * i;
-                      const rx = cx + Math.cos(angle) * 136;
-                      const ry = cy - 20 + Math.sin(angle) * 50;
-                      return (
-                        <Circle
-                          key={`top-rosette-${i}`}
-                          x={rx}
-                          y={ry}
-                          radius={9}
-                          fill="#FFFFFF"
-                          stroke={activeFrostingColor.darkHex}
-                          strokeWidth={1.5}
-                        />
-                      );
-                    })}
-
-                  {cake.icingStyle === 'swirl' && (
-                    <Ellipse
-                      x={cx}
-                      y={cy - 20}
-                      radiusX={136}
-                      radiusY={48}
-                      fill="transparent"
-                      stroke="#FFFFFF"
-                      strokeWidth={5}
-                      dash={[12, 10]}
-                    />
-                  )}
-
-                  {cake.icingStyle === 'ruffle' && (
-                    <Ellipse
-                      x={cx}
-                      y={cy - 20}
-                      radiusX={138}
-                      radiusY={50}
-                      fill="transparent"
-                      stroke="#FFFFFF"
-                      strokeWidth={4}
-                      dash={[5, 5]}
-                    />
-                  )}
-                </Group>
+              {/* Swirl Whipped Rim */}
+              {cake.icingStyle === 'swirl' && (
+                <Ellipse
+                  x={cx}
+                  y={cy - 45}
+                  radiusX={132}
+                  radiusY={54}
+                  fill="transparent"
+                  stroke="#FFFFFF"
+                  strokeWidth={6}
+                  dash={[14, 10]}
+                  shadowColor="#381D26"
+                  shadowBlur={6}
+                  shadowOpacity={0.2}
+                />
               )}
 
-              {cake.shape === 'square' && (
-                <Group>
-                  {/* Square Perspective Body */}
-                  {/* Front-Left Face */}
-                  <Line
-                    points={[cx - 130, cy - 20, cx, cy + 35, cx, cy + 105, cx - 130, cy + 50]}
-                    closed
-                    fill={activeFrostingColor.darkHex}
-                  />
-                  {/* Front-Right Face */}
-                  <Line
-                    points={[cx, cy + 35, cx + 130, cy - 20, cx + 130, cy + 50, cx, cy + 105]}
-                    closed
-                    fill={activeFrostingColor.darkHex}
-                    opacity={0.82}
-                  />
-                  {/* Bottom Cake Edge Piping */}
-                  <Line
-                    points={[cx - 130, cy + 50, cx, cy + 105, cx + 130, cy + 50]}
-                    stroke="#FFFFFF"
-                    strokeWidth={5}
-                    lineCap="round"
-                    lineJoin="round"
-                  />
-                  {/* Top Square Face */}
-                  <Line
-                    points={[cx, cy - 75, cx + 130, cy - 20, cx, cy + 35, cx - 130, cy - 20]}
-                    closed
-                    fillLinearGradientStartPoint={{ x: cx - 130, y: cy - 75 }}
-                    fillLinearGradientEndPoint={{ x: cx + 130, y: cy + 35 }}
-                    fillLinearGradientColorStops={[
-                      0,
-                      '#FFFFFF',
-                      0.3,
-                      activeFrostingColor.hex,
-                      1,
-                      activeFrostingColor.hex
-                    ]}
-                    stroke={activeFrostingColor.darkHex}
-                    strokeWidth={2}
-                    shadowColor="#63384B"
-                    shadowBlur={8}
-                    shadowOpacity={0.12}
-                  />
-                  {/* Icing style border for square */}
-                  <Line
-                    points={[cx, cy - 75, cx + 130, cy - 20, cx, cy + 35, cx - 130, cy - 20]}
-                    closed
-                    stroke="#FFFFFF"
-                    strokeWidth={cake.icingStyle === 'rosette' ? 7 : 3}
-                    dash={cake.icingStyle === 'swirl' ? [10, 8] : undefined}
-                  />
-                </Group>
+              {/* Vintage Ruffle Border */}
+              {cake.icingStyle === 'ruffle' && (
+                <Ellipse
+                  x={cx}
+                  y={cy - 45}
+                  radiusX={134}
+                  radiusY={55}
+                  fill="transparent"
+                  stroke="#FFFFFF"
+                  strokeWidth={5}
+                  dash={[6, 6]}
+                  shadowColor="#381D26"
+                  shadowBlur={4}
+                  shadowOpacity={0.18}
+                />
               )}
 
-              {cake.shape === 'heart' && (
-                <Group>
-                  {/* Heart 2.5D Body & Depth */}
-                  {/* Side extrusion */}
-                  <Path
-                    data={`M ${cx - 120} ${cy - 10} C ${cx - 120} ${cy + 40}, ${cx} ${cy + 75}, ${cx} ${cy + 95} L ${cx} ${cy + 130} C ${cx} ${cy + 110}, ${cx - 120} ${cy + 75}, ${cx - 120} ${cy + 25} Z`}
-                    fill={activeFrostingColor.darkHex}
-                  />
-                  <Path
-                    data={`M ${cx + 120} ${cy - 10} C ${cx + 120} ${cy + 40}, ${cx} ${cy + 75}, ${cx} ${cy + 95} L ${cx} ${cy + 130} C ${cx} ${cy + 110}, ${cx + 120} ${cy + 75}, ${cx + 120} ${cy + 25} Z`}
-                    fill={activeFrostingColor.darkHex}
-                    opacity={0.85}
-                  />
-                  {/* Heart Top Surface */}
-                  <Path
-                    data={`M ${cx} ${cy + 50} C ${cx - 70} ${cy + 20}, ${cx - 140} ${cy - 30}, ${cx - 120} ${cy - 75} C ${cx - 100} ${cy - 120}, ${cx - 30} ${cy - 110}, ${cx} ${cy - 65} C ${cx + 30} ${cy - 110}, ${cx + 100} ${cy - 120}, ${cx + 120} ${cy - 75} C ${cx + 140} ${cy - 30}, ${cx + 70} ${cy + 20}, ${cx} ${cy + 50} Z`}
-                    fillLinearGradientStartPoint={{ x: cx - 120, y: cy - 110 }}
-                    fillLinearGradientEndPoint={{ x: cx + 120, y: cy + 50 }}
-                    fillLinearGradientColorStops={[
-                      0,
-                      '#FFFFFF',
-                      0.35,
-                      activeFrostingColor.hex,
-                      1,
-                      activeFrostingColor.hex
-                    ]}
-                    stroke={activeFrostingColor.darkHex}
-                    strokeWidth={2}
-                    shadowColor="#63384B"
-                    shadowBlur={10}
-                    shadowOpacity={0.14}
-                  />
-                  {/* Heart Scalloped Rim */}
-                  <Path
-                    data={`M ${cx} ${cy + 48} C ${cx - 70} ${cy + 18}, ${cx - 138} ${cy - 30}, ${cx - 118} ${cy - 73} C ${cx - 98} ${cy - 118}, ${cx - 30} ${cy - 108}, ${cx} ${cy - 63} C ${cx + 30} ${cy - 108}, ${cx + 98} ${cy - 118}, ${cx + 118} ${cy - 73} C ${cx + 138} ${cy - 30}, ${cx + 70} ${cy + 18}, ${cx} ${cy + 48} Z`}
-                    fill="transparent"
-                    stroke="#FFFFFF"
-                    strokeWidth={cake.icingStyle === 'rosette' ? 6 : 3}
-                    dash={cake.icingStyle === 'swirl' ? [8, 6] : undefined}
-                  />
-                </Group>
+              {/* LAYER 6: PHOTOREALISTIC CHOCOLATE DRIP EFFECT */}
+              {cake.icingStyle === 'drip' && dripImage && (
+                <KonvaImage
+                  image={dripImage}
+                  x={cx}
+                  y={cy - 50}
+                  width={340}
+                  height={190}
+                  offsetX={170}
+                  offsetY={95}
+                  opacity={0.96}
+                  shadowColor="#1F0E08"
+                  shadowBlur={8}
+                  shadowOpacity={0.35}
+                  shadowOffsetY={3}
+                />
               )}
 
-              {cake.shape === 'rectangle' && (
-                <Group>
-                  {/* Slab Rectangle Perspective Body */}
-                  <Line
-                    points={[cx - 150, cy - 25, cx - 20, cy + 40, cx - 20, cy + 110, cx - 150, cy + 45]}
-                    closed
-                    fill={activeFrostingColor.darkHex}
-                  />
-                  <Line
-                    points={[cx - 20, cy + 40, cx + 150, cy - 15, cx + 150, cy + 55, cx - 20, cy + 110]}
-                    closed
-                    fill={activeFrostingColor.darkHex}
-                    opacity={0.8}
-                  />
-                  {/* Top Slab Face */}
-                  <Line
-                    points={[cx - 20, cy - 80, cx + 150, cy - 15, cx - 20, cy + 40, cx - 150, cy - 25]}
-                    closed
-                    fillLinearGradientStartPoint={{ x: cx - 150, y: cy - 80 }}
-                    fillLinearGradientEndPoint={{ x: cx + 150, y: cy + 40 }}
-                    fillLinearGradientColorStops={[
-                      0,
-                      '#FFFFFF',
-                      0.3,
-                      activeFrostingColor.hex,
-                      1,
-                      activeFrostingColor.hex
-                    ]}
-                    stroke={activeFrostingColor.darkHex}
-                    strokeWidth={2}
-                    shadowColor="#63384B"
-                    shadowBlur={8}
-                    shadowOpacity={0.12}
-                  />
-                  <Line
-                    points={[cx - 20, cy - 80, cx + 150, cy - 15, cx - 20, cy + 40, cx - 150, cy - 25]}
-                    closed
-                    stroke="#FFFFFF"
-                    strokeWidth={cake.icingStyle === 'rosette' ? 7 : 3}
-                    dash={cake.icingStyle === 'swirl' ? [10, 8] : undefined}
-                  />
-                </Group>
-              )}
+              {/* LAYER 7: PHOTOREALISTIC TOPPINGS & FRUITS */}
+              {(cake.decorations || []).map((dec) => (
+                <RealisticDecorationElement
+                  key={dec.instanceId}
+                  decoration={dec}
+                  isSelected={dec.instanceId === selectedId}
+                  onSelect={(id) => setSelectedId(id)}
+                  onChange={(id, attrs) => updateDecoration(id, attrs)}
+                  cakeShape={cake.shape}
+                />
+              ))}
 
-              {/* --- CUSTOM CAKE MESSAGE ON TOP SURFACE --- */}
+              {/* LAYER 8: 3D PIPED ARTISAN CAKE MESSAGE */}
               {cake.message?.text && (
                 <Group
                   x={cake.message.x || cx}
-                  y={cake.message.y || cy - 20}
+                  y={cake.message.y || cy - 45}
+                  rotation={cake.message.rotation || 0}
                   draggable
                   onDragEnd={(e) => {
-                    // Update message position
-                    const node = e.target;
-                    updateDecoration('__message__', {}); // hook can listen if needed
+                    const rawX = Math.round(e.target.x());
+                    const rawY = Math.round(e.target.y());
+                    const clamped = clampToCakeSurface(rawX, rawY, cake.shape);
+                    e.target.x(clamped.x);
+                    e.target.y(clamped.y);
+                    updateDecoration('__message__', {});
                   }}
                 >
+                  {/* Piped Message Cast Shadow */}
+                  <Text
+                    text={cake.message.text}
+                    fontFamily={cake.message.font || 'Dancing Script'}
+                    fontSize={cake.message.size || 26}
+                    fontStyle="bold"
+                    fill="#261019"
+                    opacity={0.38}
+                    align="center"
+                    verticalAlign="middle"
+                    offsetX={(cake.message.text.length * (cake.message.size || 26) * 0.28)}
+                    offsetY={10}
+                    blurRadius={2}
+                  />
+
+                  {/* Main Piped Relief Text */}
                   <Text
                     text={cake.message.text}
                     fontFamily={cake.message.font || 'Dancing Script'}
@@ -617,40 +666,28 @@ export const CakeCanvas = ({
                     verticalAlign="middle"
                     offsetX={(cake.message.text.length * (cake.message.size || 26) * 0.28)}
                     offsetY={12}
-                    shadowColor="#000"
-                    shadowBlur={2}
-                    shadowOpacity={0.15}
-                    shadowOffsetY={1}
+                    shadowColor="#FFFFFF"
+                    shadowBlur={1}
+                    shadowOpacity={0.6}
+                    shadowOffsetY={-1}
                   />
                 </Group>
               )}
 
-              {/* --- DECORATIONS LAYER --- */}
-              {(cake.decorations || []).map((dec) => (
-                <DecorationElement
-                  key={dec.instanceId}
-                  decoration={dec}
-                  isSelected={dec.instanceId === selectedId}
-                  onSelect={(id) => setSelectedId(id)}
-                  onChange={(id, attrs) => updateDecoration(id, attrs)}
-                />
-              ))}
-
-              {/* Konva Transformer Handle */}
+              {/* LAYER 9: KONVA SELECTION TRANSFORMER */}
               <Transformer
                 ref={trRef}
                 rotateEnabled={true}
                 keepRatio={true}
                 borderStroke="#E85B91"
                 borderStrokeWidth={2}
-                borderDash={[4, 4]}
+                borderDash={[5, 4]}
                 anchorFill="#FFFFFF"
                 anchorStroke="#E85B91"
                 anchorCornerRadius={4}
-                anchorSize={9}
+                anchorSize={10}
                 boundBoxFunc={(oldBox, newBox) => {
-                  // Limit minimum decoration size
-                  if (newBox.width < 16 || newBox.height < 16) {
+                  if (newBox.width < 18 || newBox.height < 18) {
                     return oldBox;
                   }
                   return newBox;
@@ -685,8 +722,8 @@ export const CakeCanvas = ({
         )}
 
         {/* Helper instruction tooltip pill */}
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur-sm px-3.5 py-1 rounded-full border border-pink-100 shadow-sm text-[11px] text-cake-muted flex items-center gap-2 pointer-events-none">
-          <span>✨ Drag & drop items freely • Click to select, resize & rotate</span>
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-white/95 backdrop-blur-sm px-4 py-1.5 rounded-full border border-pink-100 shadow-sm text-[11px] text-cake-muted flex items-center gap-2 pointer-events-none">
+          <span>✨ Studio Food Photography • Drag toppings freely • Auto-clamped to cake surface</span>
         </div>
       </div>
     </div>

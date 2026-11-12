@@ -90,19 +90,21 @@ export const Home = () => {
 
                 {/* Cake Card Preview */}
                 <div className="bg-white rounded-3xl p-6 shadow-2xl border-4 border-white/90 bg-gradient-to-b from-[#FFF0F5] to-[#FFF9F3] text-center overflow-hidden">
-                  <div className="py-8 flex flex-col items-center">
-                    <div className="text-8xl filter drop-shadow-xl select-none mb-4 animate-pulse">
-                      🎂
-                    </div>
-                    <span className="font-serif italic font-bold text-lg text-cake-dark bg-white/80 px-4 py-1 rounded-full border border-pink-200 shadow-xs">
+                  <div className="py-4 flex flex-col items-center">
+                    <img
+                      src="/assets/cakes/cake_round_strawberry.png"
+                      alt="Photorealistic Strawberry Custom Cake"
+                      className="max-h-56 max-w-full object-contain filter drop-shadow-xl hover:scale-105 transition-transform"
+                    />
+                    <span className="font-serif italic font-bold text-lg text-cake-dark bg-white/90 px-4 py-1 rounded-full border border-pink-200 shadow-xs mt-2">
                       "Happy 21st Maya!"
                     </span>
-                    <div className="flex gap-2 mt-4">
+                    <div className="flex gap-2 mt-3">
                       <span className="text-xs px-2.5 py-1 rounded-full bg-cake-light text-cake-primary font-bold">
-                        Velvet Vanilla
+                        Velvet Strawberry
                       </span>
                       <span className="text-xs px-2.5 py-1 rounded-full bg-cake-light text-cake-primary font-bold">
-                        Swiss Rosettes
+                        Marble Board
                       </span>
                     </div>
                   </div>
@@ -213,8 +215,13 @@ export const Home = () => {
                 key={cake.id}
                 className="bg-cake-cream/40 rounded-3xl overflow-hidden border border-cake-border/80 hover:shadow-cake-hover transition-all flex flex-col"
               >
-                <div className="h-48 bg-gradient-to-b from-[#FFF0F5] to-white flex items-center justify-center text-5xl">
-                  {cake.config.flavour === 'chocolate' ? '🍫' : cake.config.shape === 'heart' ? '💖' : '🎂'}
+                <div className="h-52 bg-gradient-to-b from-[#FFF0F5] to-white flex items-center justify-center p-4">
+                  <img
+                    src={cake.previewPhoto || `/assets/cakes/cake_${cake.config.shape}_${cake.config.flavour}.png`}
+                    alt={cake.title}
+                    className="max-h-44 max-w-full object-contain filter drop-shadow-md hover:scale-105 transition-transform"
+                    loading="lazy"
+                  />
                 </div>
                 <div className="p-6 flex-1 flex flex-col justify-between">
                   <div>
