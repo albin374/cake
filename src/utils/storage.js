@@ -1,5 +1,5 @@
 const CART_STORAGE_KEY = 'sweetart_cake_cart_v1';
-const BUILDER_STORAGE_KEY = 'sweetart_cake_builder_active_v1';
+const BUILDER_STORAGE_KEY = 'sweetart_cake_builder_empty_v3';
 const RECENT_ORDERS_KEY = 'sweetart_recent_orders_v1';
 
 export const getStoredCart = () => {

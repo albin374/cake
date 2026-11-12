@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useCakeBuilder } from '../hooks/useCakeBuilder';
 import { useCartContext } from '../context/CartContext';
-import { CakeCanvas } from '../components/CakeCanvas';
+import { CakeScene } from '../components/3d/CakeScene';
 import { IngredientPanel } from '../components/IngredientPanel';
 import { CustomizationPanel } from '../components/CustomizationPanel';
 import { exportStageToDataUrl, downloadCakeImage } from '../utils/canvasExport';
@@ -70,6 +70,30 @@ export const CakeBuilder = () => {
     }
   }, [location.state, loadCakeConfig]);
 
+  // Keyboard shortcuts for Undo (Ctrl+Z / Cmd+Z) and Redo (Ctrl+Y / Cmd+Shift+Z)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
+      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+      const cmdKey = isMac ? e.metaKey : e.ctrlKey;
+
+      if (cmdKey && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          if (canRedo) redo();
+        } else {
+          if (canUndo) undo();
+        }
+      } else if (cmdKey && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        if (canRedo) redo();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [undo, redo, canUndo, canRedo]);
+
   const showToast = (msg) => {
     setToastMessage(msg);
     setTimeout(() => {
@@ -101,7 +125,15 @@ export const CakeBuilder = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gingham-soft py-4 sm:py-6 lg:py-8 px-2 sm:px-4 lg:px-6">
+    <div
+      className="min-h-screen py-4 sm:py-6 lg:py-8 px-2 sm:px-4 lg:px-6 bg-cover bg-center bg-no-repeat bg-fixed relative"
+      style={{
+        backgroundImage: `url('/assets/Brushed%20Stainless%20Steel%20with%20Golden%20Highlights.png')`,
+        backgroundAttachment: 'fixed',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center'
+      }}
+    >
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 bg-cake-dark text-white text-xs sm:text-sm font-semibold px-5 py-3 rounded-full shadow-2xl flex items-center gap-2 animate-bounce">
@@ -119,7 +151,7 @@ export const CakeBuilder = () => {
                 Studio Workspace
               </span>
               <span className="text-xs text-cake-muted hidden sm:inline">
-                Interactive 2D Real-Time Atelier
+                Interactive 3D Real-Time Atelier
               </span>
             </div>
             <h1 className="font-display text-2xl sm:text-3xl font-black text-cake-text mt-1">
@@ -273,14 +305,14 @@ export const CakeBuilder = () => {
             <IngredientPanel onAddDecoration={addDecoration} />
           </div>
 
-          {/* CENTER PANEL: Interactive Cake Canvas (Col 4-8) */}
+          {/* CENTER PANEL: Interactive 3D Cake Scene (Col 4-8) */}
           <div
             className={`lg:col-span-5 lg:block ${
               activeMobileView === 'canvas' ? 'block' : 'hidden'
             }`}
           >
             <div className="flex flex-col items-center">
-              <CakeCanvas
+              <CakeScene
                 cake={cake}
                 stageRef={stageRef}
                 selectedId={selectedId}
@@ -288,6 +320,8 @@ export const CakeBuilder = () => {
                 zoomLevel={zoomLevel}
                 updateDecoration={updateDecoration}
                 deleteDecoration={deleteDecoration}
+                duplicateDecoration={duplicateDecoration}
+                updateMessage={updateMessage}
                 onDropItem={addDecoration}
               />
             </div>

@@ -43,56 +43,13 @@ export const DEFAULT_CAKE_STATE = {
   frostingColor: 'pink',
   icingStyle: 'smooth',
   message: {
-    text: 'Happy Birthday!',
+    text: '',
     font: 'Dancing Script',
     color: '#63384B',
     size: 26,
     x: 250,
-    y: 175,
+    y: 165,
     rotation: 0
   },
-  decorations: [
-    {
-      instanceId: 'dec-1',
-      id: 'strawberry',
-      name: 'Fresh Garden Strawberry',
-      price: 12,
-      x: 215,
-      y: 150,
-      width: 50,
-      height: 60,
-      rotation: -8,
-      scaleX: 1,
-      scaleY: 1,
-      category: 'fruits'
-    },
-    {
-      instanceId: 'dec-2',
-      id: 'strawberry',
-      name: 'Fresh Garden Strawberry',
-      price: 12,
-      x: 285,
-      y: 150,
-      width: 50,
-      height: 60,
-      rotation: 10,
-      scaleX: 1,
-      scaleY: 1,
-      category: 'fruits'
-    },
-    {
-      instanceId: 'dec-3',
-      id: 'blueberry',
-      name: 'Wild Blueberries Cluster',
-      price: 9,
-      x: 250,
-      y: 130,
-      width: 44,
-      height: 48,
-      rotation: 0,
-      scaleX: 1,
-      scaleY: 1,
-      category: 'fruits'
-    }
-  ]
+  decorations: []
 };
